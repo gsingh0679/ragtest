@@ -1,0 +1,61 @@
+# Configuration for RAG Knowledge Base System
+# Copy this file to config.yaml and customize for your setup
+
+embeddings:
+  # Provider options: "ollama", "huggingface", "openai"
+  provider: "ollama"
+
+  # Ollama configuration
+  # To use Ollama:
+  # 1. Install: https://ollama.ai
+  # 2. Run: ollama serve
+  # 3. Pull model: ollama pull nomic-embed-text:latest
+  model: "nomic-embed-text:latest"
+  base_url: "http://localhost:11434"
+
+  # HuggingFace configuration (uncomment to use)
+  # provider: "huggingface"
+  # model: "all-MiniLM-L6-v2"
+
+  # OpenAI configuration (uncomment to use)
+  # provider: "openai"
+  # model: "text-embedding-3-small"
+  # api_key: "your-api-key-here"  # or use OPENAI_API_KEY env var
+
+knowledge_base:
+  # Name of the knowledge base
+  name: "ragtest_kb"
+
+  # Path to store Chroma database
+  db_path: "./chroma_db"
+
+  # Chunking parameters
+  chunk_size: 800          # Characters per chunk
+  overlap: 150             # Character overlap between chunks
+  break_on_sentences: true # Break at sentence boundaries
+
+data:
+  # Directory containing PDF/TXT/MD files
+  input_dir: "./data"
+
+  # Supported file types
+  supported_formats:
+    - ".pdf"
+    - ".txt"
+    - ".md"
+    - ".markdown"
+
+retrieval:
+  # Number of results to return per query
+  top_k: 5
+
+  # Minimum similarity score (0-1)
+  min_score: 0.3
+
+  # Include metadata in results
+  include_metadata: true
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
