@@ -21,6 +21,9 @@ class RetrievalResult:
     start_char: int
     end_char: int
     token_count: int
+    sections: str = ""  # Comma-separated section numbers
+    schedules: str = ""  # Comma-separated schedule names
+    forms: str = ""  # Comma-separated form numbers
 
     def preview(self, chars: int = 150) -> str:
         """Show first N characters for debugging."""
@@ -88,7 +91,8 @@ class QueryEngine:
         self.top_k = top_k
         self.min_score = min_score
 
-    def query(self, query_text: str, top_k: Optional[int] = None, min_score: Optional[float] = None) -> QueryResponse:
+    def query(self, query_text: str, top_k: Optional[int] = None, min_score: Optional[float] = None,
+              filter_sections: Optional[list] = None) -> QueryResponse:
         """
         Query the knowledge base for relevant chunks.
 
@@ -96,6 +100,7 @@ class QueryEngine:
             query_text: User query string
             top_k: Override default top_k for this query
             min_score: Override default min_score for this query
+            filter_sections: Optional list of sections to filter by (e.g., ['80C', '80D'])
 
         Returns:
             QueryResponse with retrieved chunks and scores
@@ -106,20 +111,63 @@ class QueryEngine:
         # Embed the query
         query_embedding = self.embeddings.embed_text(query_text)
 
-        # Search in Chroma
+        # Search in Chroma (get more results to filter)
+        search_k = int(top_k * 2) if filter_sections else top_k  # Get 2x results if filtering
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k
+            n_results=search_k
         )
 
         # Parse results
         retrieved_chunks = self._parse_results(results, min_score)
+
+        # Apply section filtering if specified
+        if filter_sections and retrieved_chunks:
+            retrieved_chunks = self._filter_by_sections(retrieved_chunks, filter_sections)
+
+        # Keep only top_k after filtering
+        retrieved_chunks = retrieved_chunks[:top_k]
 
         return QueryResponse(
             query=query_text,
             results=retrieved_chunks,
             query_embedding=query_embedding
         )
+
+    def _filter_by_sections(self, chunks: List[RetrievalResult], target_sections: list) -> List[RetrievalResult]:
+        """
+        Filter retrieval results by section numbers.
+
+        Args:
+            chunks: List of RetrievalResult objects
+            target_sections: List of section numbers to keep (e.g., ['80C', '80D'])
+
+        Returns:
+            Filtered list of chunks (prioritizes exact matches)
+        """
+        target_sections_upper = [s.upper() for s in target_sections]
+
+        exact_matches = []
+        partial_matches = []
+
+        for chunk in chunks:
+            # Get sections from metadata
+            chunk_sections = chunk.sections if hasattr(chunk, 'sections') else ""
+            chunk_sections_list = [s.strip().upper() for s in chunk_sections.split(",") if s.strip()]
+
+            # Check for exact matches
+            if any(s in target_sections_upper for s in chunk_sections_list):
+                exact_matches.append(chunk)
+            # Check for partial matches (e.g., "80" matches "80C", "80D")
+            elif any(
+                s in target_sections_upper or
+                any(target.startswith(s) for target in target_sections_upper if len(s) > 0)
+                for s in chunk_sections_list
+            ):
+                partial_matches.append(chunk)
+
+        # Return exact matches first, then partial matches
+        return exact_matches + partial_matches
 
     def _parse_results(self, results: Dict[str, Any], min_score: float) -> List[RetrievalResult]:
         """
@@ -158,7 +206,10 @@ class QueryEngine:
                 similarity_score=similarity,
                 start_char=metadata.get("start_char", 0),
                 end_char=metadata.get("end_char", 0),
-                token_count=metadata.get("token_count", 0)
+                token_count=metadata.get("token_count", 0),
+                sections=metadata.get("sections", ""),
+                schedules=metadata.get("schedules", ""),
+                forms=metadata.get("forms", "")
             )
             retrieved.append(result)
 

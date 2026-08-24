@@ -20,6 +20,7 @@ from src.models import Document, Chunk
 from src.config import get_config_loader
 from src.chroma_utils import init_chroma_collection
 from src.chunk_analyzer import ChunkAnalyzer
+from src.metadata_extractor import MetadataExtractor
 
 
 class KnowledgeBaseBuilder:
@@ -256,16 +257,26 @@ class KnowledgeBaseBuilder:
         # Prepare data for Chroma
         ids = [chunk.chunk_id for chunk in chunks_list]
         documents = [chunk.content for chunk in chunks_list]
-        metadatas = [
-            {
+        metadatas = []
+        for chunk in chunks_list:
+            # Extract metadata from chunk content
+            extracted_meta = MetadataExtractor.extract_metadata(chunk.content)
+
+            metadata = {
                 "source": chunk.source_document,
                 "chunk_index": chunk.chunk_index,
                 "start_char": chunk.start_char,
                 "end_char": chunk.end_char,
-                "token_count": chunk.token_count
+                "token_count": chunk.token_count,
+                # Extracted metadata
+                "sections": ",".join(extracted_meta["sections"]),
+                "schedules": ",".join(extracted_meta["schedules"]),
+                "forms": ",".join(extracted_meta["forms"]),
+                "has_deduction": str(extracted_meta["has_deduction"]),
+                "has_relief": str(extracted_meta["has_relief"]),
+                "has_income": str(extracted_meta["has_income"]),
             }
-            for chunk in chunks_list
-        ]
+            metadatas.append(metadata)
 
         # Add to Chroma collection
         # ChromaDB's embedding function will handle embedding generation
