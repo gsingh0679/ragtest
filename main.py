@@ -14,28 +14,36 @@ from src.knowledge_base.builder import KnowledgeBaseBuilder
 from src.retrieval import QueryEngine
 from src.embeddings.factory import EmbeddingsFactory
 from src.llm import OllamaClient
+from src.config import get_config_loader
 
 
 def build_kb(args):
     """Build knowledge base from documents."""
-    print(f"\n🔧 Building Knowledge Base: {args.kb_name}\n")
-
-    config = {
-        "provider": "ollama",
-        "model": args.model,
-        "base_url": "http://localhost:11434"
-    }
-
     try:
+        # Load configuration
+        config_loader = get_config_loader()
+        kb_config = config_loader.get_kb_config()
+
+        # Override with CLI arguments if provided
+        kb_name = args.kb_name if args.kb_name != "ragtest_kb" else kb_config["name"]
+        data_dir = args.data_dir if args.data_dir != "./data" else config_loader.get_data_config()["input_dir"]
+        chunk_size = args.chunk_size if args.chunk_size != 800 else kb_config["chunk_size"]
+        overlap = args.overlap if args.overlap != 150 else kb_config["overlap"]
+        db_path = args.db_path if args.db_path != "./chroma_db" else kb_config["db_path"]
+
+        print(f"\n🔧 Building Knowledge Base: {kb_name}")
+        print(f"📂 Data directory: {data_dir}")
+        print(f"📊 Chunk size: {chunk_size}, Overlap: {overlap}\n")
+
         builder = KnowledgeBaseBuilder(
-            kb_name=args.kb_name,
-            chunk_size=args.chunk_size,
-            overlap=args.overlap,
-            embeddings_config=config,
-            db_path=args.db_path
+            kb_name=kb_name,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            embeddings_config=config_loader.get_embeddings_config(),
+            db_path=db_path
         )
 
-        stats = builder.build_from_directory(args.data_dir)
+        stats = builder.build_from_directory(data_dir)
         builder.print_stats()
         builder.save_metadata()
 
@@ -46,8 +54,6 @@ def build_kb(args):
         print(f"❌ Connection Error: {e}")
         print("\nMake sure Ollama is running:")
         print("  ollama serve")
-        print("\nAnd pull the model:")
-        print(f"  ollama pull {args.model}")
         return 1
 
     except ValueError as e:
@@ -67,24 +73,36 @@ def query_kb(args):
     print(f"🔍 Query: {args.query}\n")
 
     try:
+        # Load configuration
+        config_loader = get_config_loader()
+        kb_config = config_loader.get_kb_config()
+        retrieval_config = config_loader.get_retrieval_config()
+        llm_config = config_loader.get_llm_config()
+
+        # Override with CLI arguments if provided
+        kb_name = args.kb_name if args.kb_name != "ragtest_kb" else kb_config["name"]
+        db_path = args.db_path if args.db_path != "./chroma_db" else kb_config["db_path"]
+        top_k = args.top_k if args.top_k != 5 else retrieval_config["top_k"]
+        min_score = args.min_score if args.min_score != 0.3 else retrieval_config["min_score"]
+        use_llm = args.use_llm
+        llm_model = args.llm_model if args.llm_model != "llama2" else llm_config["model"]
+        temperature = args.temperature if args.temperature != 0.7 else llm_config["temperature"]
+
         # Initialize embeddings (same model used during KB building)
-        config = {
-            "provider": "ollama",
-            "model": args.embedding_model,
-            "base_url": "http://localhost:11434"
-        }
-        embeddings = EmbeddingsFactory.create_from_config(config)
+        embeddings = EmbeddingsFactory.create_from_config(
+            config_loader.get_embeddings_config()
+        )
 
         # Connect to Chroma collection
-        client = chromadb.PersistentClient(path=args.db_path)
-        collection = client.get_collection(name=args.kb_name)
+        client = chromadb.PersistentClient(path=db_path)
+        collection = client.get_collection(name=kb_name)
 
         # Initialize QueryEngine
         query_engine = QueryEngine(
             chroma_collection=collection,
             embeddings=embeddings,
-            top_k=args.top_k,
-            min_score=args.min_score
+            top_k=top_k,
+            min_score=min_score
         )
 
         # Run query
@@ -94,12 +112,15 @@ def query_kb(args):
         query_engine.print_results(response)
 
         # Generate LLM answer if requested
-        if args.use_llm:
+        if use_llm:
             print("🤖 Generating answer with LLM...\n")
             try:
-                llm = OllamaClient(model=args.llm_model)
-                context = query_engine.get_context(args.query, top_k=args.top_k)
-                answer = llm.generate_answer(args.query, context, temperature=args.temperature)
+                llm = OllamaClient(
+                    model=llm_model,
+                    base_url=llm_config.get("base_url", "http://localhost:11434")
+                )
+                context = query_engine.get_context(args.query, top_k=top_k)
+                answer = llm.generate_answer(args.query, context, temperature=temperature)
                 print(f"Answer:\n{answer}\n")
             except ConnectionError as e:
                 print(f"❌ LLM Error: {e}")

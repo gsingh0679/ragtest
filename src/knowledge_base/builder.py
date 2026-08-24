@@ -17,10 +17,36 @@ from src.core.text_chunker import TextChunker
 from src.embeddings.base import EmbeddingsBase
 from src.embeddings.factory import EmbeddingsFactory
 from src.models import Document, Chunk
+from src.config import get_config_loader
+from src.chroma_utils import init_chroma_collection, verify_embedding_consistency
 
 
 class KnowledgeBaseBuilder:
     """Build and manage a knowledge base from documents."""
+
+    @classmethod
+    def from_config(cls, config_path: str = "./config.yaml"):
+        """
+        Create KnowledgeBaseBuilder from config file.
+
+        Args:
+            config_path: Path to config.yaml
+
+        Returns:
+            Initialized KnowledgeBaseBuilder
+        """
+        config_loader = get_config_loader(config_path)
+        kb_config = config_loader.get_kb_config()
+        embeddings_config = config_loader.get_embeddings_config()
+
+        return cls(
+            kb_name=kb_config["name"],
+            chunk_size=kb_config["chunk_size"],
+            overlap=kb_config["overlap"],
+            embeddings_config=embeddings_config,
+            db_path=kb_config["db_path"],
+            break_on_sentences=kb_config["break_on_sentences"]
+        )
 
     def __init__(
         self,
@@ -100,13 +126,11 @@ class KnowledgeBaseBuilder:
         """Initialize Chroma database."""
         os.makedirs(db_path, exist_ok=True)
 
-        # Use new Chroma API with persistent client
-        self.client = chromadb.PersistentClient(path=db_path)
-
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name=self.kb_name,
-            metadata={"hnsw:space": "cosine"}
+        # Initialize collection with proper setup
+        self.collection, self.client = init_chroma_collection(
+            db_path=db_path,
+            collection_name=self.kb_name,
+            embeddings_model=self.embeddings
         )
 
     def build_from_directory(self, dir_path: str, progress_callback=None) -> Dict[str, Any]:
@@ -125,6 +149,15 @@ class KnowledgeBaseBuilder:
         dir_path = Path(dir_path)
         if not dir_path.is_dir():
             raise ValueError(f"Directory not found: {dir_path}")
+
+        # Verify embedding consistency
+        print("🔍 Verifying embedding consistency...")
+        try:
+            verify_embedding_consistency(self.collection, self.embeddings)
+            print("✓ Embedding consistency verified\n")
+        except ValueError as e:
+            print(f"❌ {e}\n")
+            raise
 
         stats = {
             "documents_loaded": 0,
