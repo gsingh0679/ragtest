@@ -1,33 +1,87 @@
-# RAG Document Chunking - Optimized for Memory Efficiency
+# RAG System - Semantic Search & Knowledge Base
 
-A production-ready document chunking system optimized for large-scale RAG (Retrieval-Augmented Generation) applications.
+A production-ready Retrieval-Augmented Generation (RAG) system with memory-efficient document processing, semantic search, and optional LLM integration.
+
+## Overview
+
+**Complete RAG pipeline:**
+1. 📄 **Document Loading** — Load PDF, TXT, Markdown files
+2. ✂️ **Memory-Efficient Chunking** — Stream chunks (98.4x less memory)
+3. 🔗 **Embedding Generation** — Ollama, HuggingFace, or OpenAI
+4. 💾 **Knowledge Base** — Store chunks in Chroma vector database
+5. 🔍 **Semantic Search** — Query and retrieve relevant chunks
+6. 🤖 **Answer Generation** — Optional LLM-based responses (Ollama)
 
 ## Quick Start
 
+### 1. Build Knowledge Base
+
+```bash
+# Build KB from documents in ./data directory
+python main.py build --kb-name ragtest_kb --data-dir ./data
+
+# Custom settings
+python main.py build --chunk-size 1000 --overlap 200 --model nomic-embed-text:latest
+```
+
+### 2. Query Knowledge Base
+
+```bash
+# Simple retrieval (semantic search only)
+python main.py query "What are the key features?"
+
+# Retrieve top results
+python main.py query "What are the key features?" --top-k 10
+
+# With LLM answer generation
+python main.py query "What are the key features?" --use-llm --llm-model llama2
+```
+
+### Python API
+
 ```python
-from src.text_chunker import TextChunker
-from src.document_loader import DocumentLoader
+from src.knowledge_base.builder import KnowledgeBaseBuilder
+from src.retrieval import QueryEngine
+from src.embeddings.factory import EmbeddingsFactory
+import chromadb
 
-# Load document
-loader = DocumentLoader()
-doc = loader.load("document.pdf")
+# Build knowledge base
+builder = KnowledgeBaseBuilder(kb_name="ragtest_kb")
+stats = builder.build_from_directory("./data")
 
-# Process chunks efficiently (memory-optimized)
-chunker = TextChunker(chunk_size=800, overlap=150)
-for chunk in chunker.chunk_stream(doc):
-    save_to_database(chunk)
+# Query knowledge base
+client = chromadb.PersistentClient(path="./chroma_db")
+collection = client.get_collection(name="ragtest_kb")
+embeddings = EmbeddingsFactory.create_ollama()
+engine = QueryEngine(collection, embeddings, top_k=5)
+
+response = engine.query("What is RAG?")
+for result in response.results:
+    print(f"Score: {result.similarity_score:.2%}")
+    print(f"Source: {result.source}")
+    print(result.preview(150))
 ```
 
 ## Key Features
 
+### Document Processing
 | Feature | Benefit |
 |---------|---------|
 | **Memory Efficient** | 98.4x less memory than list-based approaches |
-| **Fast** | 1.4-2.0x faster processing speed |
+| **Fast** | 1.4-2.0x faster chunking speed |
 | **Scalable** | Handles documents up to available RAM |
 | **Streaming** | Process chunks one-at-a-time, no accumulation |
-| **Batch Support** | Built-in batch processing for databases |
 | **Sentence-Aware** | Respects sentence boundaries for better chunks |
+
+### Query & Retrieval
+| Feature | Benefit |
+|---------|---------|
+| **Semantic Search** | Find relevant chunks using embeddings |
+| **Multiple Providers** | Ollama, HuggingFace, OpenAI embeddings |
+| **Similarity Scoring** | Ranked results with relevance scores |
+| **Flexible Filtering** | Configurable top_k and min_score thresholds |
+| **LLM Integration** | Optional answer generation with Ollama |
+| **Context Formatting** | Ready-to-use context for LLM prompts |
 
 ## Performance Metrics
 
@@ -47,16 +101,41 @@ Scaling:          Linear with document size (10x size = 10.4x time)
 ```
 ragtest/
 ├── src/
-│   ├── document_loader.py    # Load PDF, TXT, Markdown files
-│   ├── text_chunker.py       # Streaming chunk generation (optimized)
-│   ├── batch_processor.py    # Batch processing for directories
-│   ├── models.py             # Data models (Document, Chunk)
+│   ├── core/                  # Document loading & chunking
+│   │   ├── document_loader.py    # Load PDF, TXT, Markdown
+│   │   ├── text_chunker.py       # Streaming chunk generation
+│   │   └── batch_processor.py    # Batch processing for directories
+│   │
+│   ├── embeddings/            # Embedding providers
+│   │   ├── base.py               # Abstract base class
+│   │   ├── factory.py            # Factory pattern for creation
+│   │   └── implementations.py    # Ollama, HuggingFace, OpenAI
+│   │
+│   ├── knowledge_base/        # KB building
+│   │   └── builder.py            # Build KB from documents
+│   │
+│   ├── retrieval/             # Query layer
+│   │   ├── query_engine.py       # Semantic search & retrieval
+│   │   └── __init__.py
+│   │
+│   ├── llm/                   # LLM integration
+│   │   ├── ollama_client.py      # Ollama for answer generation
+│   │   └── __init__.py
+│   │
+│   ├── models.py              # Data models (Document, Chunk)
 │   └── __init__.py
+│
+├── tests/                     # Test suite
+│   ├── test_text_chunker.py      # Chunker tests (7/7 pass)
+│   ├── test_document_loader.py   # Loader tests (4/4 pass)
+│   ├── test_memory_usage.py      # Memory verification
+│   ├── test_performance.py       # Speed benchmarks
+│   └── conftest.py
+│
 ├── data/                      # Sample documents
-├── test_text_chunker.py       # Chunker tests (7/7 pass)
-├── test_document_loader.py    # Loader tests (4/4 pass)
-├── test_memory_usage.py       # Memory verification benchmarks
-├── test_performance.py        # Speed benchmarks
+├── chroma_db/                 # Vector database (created after build)
+├── config.yaml                # Configuration file
+├── main.py                    # CLI entry point
 ├── streaming_example.py       # Usage examples
 ├── OPTIMIZATION_GUIDE.md      # Complete optimization guide
 └── README.md                  # This file
@@ -97,6 +176,117 @@ processor.process_with_buffer("data/documents/", save_batch, batch_size=100)
 processor.process_file("file.pdf", on_chunk=lambda chunk: process(chunk))
 ```
 
+### QueryEngine - Semantic Search
+
+```python
+from src.retrieval import QueryEngine
+from src.embeddings.factory import EmbeddingsFactory
+import chromadb
+
+# Initialize embeddings and Chroma connection
+embeddings = EmbeddingsFactory.create_ollama(model="nomic-embed-text:latest")
+client = chromadb.PersistentClient(path="./chroma_db")
+collection = client.get_collection(name="ragtest_kb")
+
+# Create query engine
+engine = QueryEngine(
+    chroma_collection=collection,
+    embeddings=embeddings,
+    top_k=5,
+    min_score=0.3
+)
+
+# Query and get results
+response = engine.query("What is RAG?")
+
+# Results include: chunk_id, content, source, similarity_score, etc.
+for result in response.results:
+    print(f"[{result.source}] Score: {result.similarity_score:.2%}")
+    print(result.content)
+
+# Get formatted context for LLM
+context = engine.get_context("What is RAG?", top_k=5)
+
+# Pretty print results
+engine.print_results(response, show_score=True)
+```
+
+### OllamaClient - LLM Answer Generation
+
+```python
+from src.llm import OllamaClient
+
+llm = OllamaClient(model="llama2", base_url="http://localhost:11434")
+
+# Generate answer from context
+answer = llm.generate_answer(
+    question="What is RAG?",
+    context=retrieved_context,
+    temperature=0.7
+)
+
+print(answer)
+```
+
+## CLI Usage
+
+### Build Command
+
+```bash
+# Basic build
+python main.py build --kb-name ragtest_kb --data-dir ./data
+
+# With custom settings
+python main.py build \
+  --kb-name my_kb \
+  --data-dir ./documents \
+  --chunk-size 1000 \
+  --overlap 200 \
+  --model nomic-embed-text:latest \
+  --db-path ./vector_db
+```
+
+**Options:**
+- `--kb-name` — Knowledge base name (default: ragtest_kb)
+- `--data-dir` — Directory with documents (default: ./data)
+- `--model` — Embedding model (default: nomic-embed-text:latest)
+- `--chunk-size` — Chunk size in characters (default: 800)
+- `--overlap` — Overlap between chunks (default: 150)
+- `--db-path` — Chroma database path (default: ./chroma_db)
+
+### Query Command
+
+```bash
+# Basic query (retrieval only)
+python main.py query "What is RAG?"
+
+# Customize retrieval
+python main.py query "What is RAG?" --top-k 10 --min-score 0.5
+
+# With LLM answer generation
+python main.py query "What is RAG?" --use-llm
+
+# Full example
+python main.py query "What is RAG?" \
+  --kb-name ragtest_kb \
+  --embedding-model nomic-embed-text:latest \
+  --top-k 5 \
+  --min-score 0.3 \
+  --use-llm \
+  --llm-model llama2 \
+  --temperature 0.7
+```
+
+**Options:**
+- `query` — Your search query (required)
+- `--kb-name` — Knowledge base name (default: ragtest_kb)
+- `--embedding-model` — Model for query embedding (default: nomic-embed-text:latest)
+- `--top-k` — Number of results (default: 5)
+- `--min-score` — Minimum similarity threshold (default: 0.3)
+- `--use-llm` — Generate LLM answer
+- `--llm-model` — Model for LLM (default: llama2)
+- `--temperature` — LLM temperature (default: 0.7)
+
 ## Configuration
 
 ### Chunk Size
@@ -122,39 +312,80 @@ chunker = TextChunker(break_on_sentences=True)
 chunker = TextChunker(break_on_sentences=False)
 ```
 
-## Common Patterns
+## Common Workflows
 
-### Pattern 1: Process and Save
+### Workflow 1: Build KB and Query
+
+```bash
+# Step 1: Build KB
+python main.py build --kb-name my_kb --data-dir ./docs
+
+# Step 2: Query (retrieval only)
+python main.py query "What is the main topic?"
+
+# Step 3: Query with LLM answer
+python main.py query "What is the main topic?" --use-llm
+```
+
+### Workflow 2: Python API - End-to-End
+
 ```python
+from src.knowledge_base.builder import KnowledgeBaseBuilder
+from src.retrieval import QueryEngine
+from src.embeddings.factory import EmbeddingsFactory
+from src.llm import OllamaClient
+import chromadb
+
+# 1. Build KB
+builder = KnowledgeBaseBuilder(kb_name="my_kb")
+builder.build_from_directory("./documents")
+
+# 2. Connect and query
+client = chromadb.PersistentClient(path="./chroma_db")
+collection = client.get_collection(name="my_kb")
+embeddings = EmbeddingsFactory.create_ollama()
+engine = QueryEngine(collection, embeddings, top_k=5)
+
+# 3. Semantic search
+response = engine.query("Your question here")
+print(f"Found {len(response.results)} results")
+
+# 4. Optional: Generate answer with LLM
+if response.results:
+    llm = OllamaClient(model="llama2")
+    context = engine.get_context("Your question here")
+    answer = llm.generate_answer("Your question here", context)
+    print(f"Answer: {answer}")
+```
+
+### Workflow 3: Custom Chunking Pattern
+
+```python
+from src.core.document_loader import DocumentLoader
+from src.core.text_chunker import TextChunker
+
+# Load and chunk for processing
+loader = DocumentLoader()
+chunker = TextChunker(chunk_size=800, overlap=150)
+
+doc = loader.load("document.pdf")
 for chunk in chunker.chunk_stream(doc):
-    db.save(chunk)
+    # Process each chunk (embed, save, etc)
+    embedding = embeddings.embed_text(chunk.content)
+    save_to_db(chunk, embedding)
 ```
 
-### Pattern 2: Batch to Database
-```python
-processor.process_with_buffer(
-    "data/",
-    on_batch=lambda chunks: db.insert_many(chunks),
-    batch_size=100
-)
-```
+### Workflow 4: Retrieve and Rerank
 
-### Pattern 3: Track Progress
 ```python
-chunk_count = 0
-for chunk in chunker.chunk_stream(doc):
-    process(chunk)
-    chunk_count += 1
-    if chunk_count % 100 == 0:
-        print(f"Processed {chunk_count} chunks")
-```
+# Get more results, then rerank locally
+response = engine.query("Question", top_k=20)
 
-### Pattern 4: With First Chunk Handling (API Streaming)
-```python
-for i, chunk in enumerate(chunker.chunk_stream(doc)):
-    if i == 0:
-        send_response_header(chunk)  # Respond immediately
-    process(chunk)
+# Filter by score
+high_relevance = [r for r in response.results if r.similarity_score > 0.7]
+
+# Use top results for LLM
+context = "\n".join([r.content for r in high_relevance[:5]])
 ```
 
 ## Supported Formats
@@ -179,6 +410,54 @@ Limited only by available RAM:
 - 2 GB system: Process up to 2 GB documents
 - 8 GB system: Process up to 8 GB documents
 - 16 GB system: Process up to 16 GB documents
+
+## Setup & Prerequisites
+
+### Python Requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+Required packages:
+- `chromadb` — Vector database
+- `pypdf` — PDF text extraction
+- `sentence-transformers` — For HuggingFace embeddings
+- `requests` — HTTP client for Ollama
+
+### Embedding Providers Setup
+
+#### Ollama (Recommended for local development)
+
+1. Install Ollama: https://ollama.ai
+2. Run Ollama server:
+   ```bash
+   ollama serve
+   ```
+3. Pull embedding model:
+   ```bash
+   ollama pull nomic-embed-text:latest
+   ```
+4. (Optional) Pull LLM model for answer generation:
+   ```bash
+   ollama pull llama2
+   # or
+   ollama pull mistral
+   ```
+
+#### HuggingFace
+
+Models download automatically on first use. Set environment variable if needed:
+```bash
+export HF_HOME=/path/to/cache
+```
+
+#### OpenAI
+
+Set API key:
+```bash
+export OPENAI_API_KEY=your-api-key-here
+```
 
 ## Testing & Verification
 
@@ -270,20 +549,59 @@ processor.process_with_buffer("data/", save_batch, batch_size=100)
 
 ## Architecture
 
+### Full RAG Pipeline
+
 ```
-Raw Documents
-      ↓
-DocumentLoader (PDF, TXT, MD support)
-      ↓
-Document Objects (content + metadata)
-      ↓
-TextChunker (streaming, with overlap)
-      ↓
-Chunk Objects (yielded one at a time)
-      ↓
-BatchProcessor (optional, for directories)
-      ↓
-Your Processing (DB, API, cache, etc)
+BUILD PHASE:
+  Raw Documents
+        ↓
+  DocumentLoader (PDF, TXT, MD)
+        ↓
+  Document Objects
+        ↓
+  TextChunker (streaming, with overlap)
+        ↓
+  Chunk Objects
+        ↓
+  EmbeddingsFactory (Ollama/HuggingFace/OpenAI)
+        ↓
+  Vector Embeddings
+        ↓
+  KnowledgeBaseBuilder
+        ↓
+  Chroma Vector Database
+
+
+QUERY PHASE:
+  User Query
+        ↓
+  EmbeddingsFactory (same model as build)
+        ↓
+  Query Embedding
+        ↓
+  QueryEngine (semantic search)
+        ↓
+  Chroma Collection
+        ↓
+  Retrieved Chunks (ranked by score)
+        ↓
+  [Optional] OllamaClient (LLM answer generation)
+        ↓
+  Final Response
+```
+
+### Layered Design
+
+```
+Application Layer
+       ↓
+Retrieval Layer (QueryEngine, OllamaClient)
+       ↓
+Knowledge Base Layer (Builder, Embeddings)
+       ↓
+Core Layer (Chunking, Loading)
+       ↓
+Vector Storage (Chroma)
 ```
 
 ## Migration Guide
@@ -308,6 +626,8 @@ If upgrading from list-based chunking:
 
 ## FAQ
 
+### Document Processing
+
 **Q: Can I handle 1 GB documents?**
 A: Yes, if your system has 1 GB+ RAM available. Memory usage will be ~1 GB + 18 KB.
 
@@ -317,14 +637,37 @@ A: No, streaming is 1.4-2.0x faster due to less memory pressure.
 **Q: What's the chunk_size vs overlap trade-off?**
 A: Larger chunks = fewer API calls but less granular. Overlap prevents losing context at boundaries.
 
-**Q: Can I use this with LLMs?**
-A: Yes! Stream chunks to embeddings or LLM APIs without memory spikes.
-
 **Q: Do I need to collect chunks into a list?**
 A: Only if you must compare or analyze multiple chunks. Otherwise, stream directly.
 
 **Q: What about PDFs with images?**
 A: Currently extracts text only. Images are not processed.
+
+### Query & Retrieval
+
+**Q: What embedding models are supported?**
+A: Ollama (local), HuggingFace (local/cached), OpenAI (API). Configure in config.yaml or via factory.
+
+**Q: How does similarity scoring work?**
+A: Uses cosine distance: `similarity = 1 - distance`. Scores range 0-1 (1 = perfect match).
+
+**Q: What's min_score and how do I tune it?**
+A: Minimum relevance threshold. Start at 0.3, increase if getting irrelevant results.
+
+**Q: Can I use different embedding models for build vs query?**
+A: Yes, but not recommended. The embedding space must be consistent.
+
+**Q: How do I integrate with my LLM API?**
+A: OllamaClient is built-in. For OpenAI/other APIs, extend the LLM interface.
+
+**Q: Can I get chunks without LLM?**
+A: Yes! QueryEngine returns `QueryResponse` with full chunk details regardless of LLM.
+
+**Q: How do I speed up queries?**
+A: Reduce `top_k`, use higher `min_score`, or pre-filter by source.
+
+**Q: What if my Ollama model is on a different machine?**
+A: Set `base_url` in config to the remote address: `http://192.168.1.100:11434`
 
 ## Documentation
 
@@ -337,9 +680,38 @@ For detailed information, see **OPTIMIZATION_GUIDE.md**:
 
 ## Requirements
 
+### Core Requirements
+
 - Python 3.8+
-- pypdf - For PDF text extraction
-- pathlib - File handling (standard library)
+- `chromadb` — Vector database for embeddings storage
+- `pypdf` — PDF text extraction
+- `pyyaml` — Configuration file parsing
+
+### Embedding Providers (choose at least one)
+
+- **Ollama** (Recommended)
+  - Install from https://ollama.ai
+  - No additional Python packages needed
+  - Runs locally, fully private
+
+- **HuggingFace**
+  - `sentence-transformers` — For embedding models
+  - Models auto-download on first use
+  
+- **OpenAI**
+  - `openai` package (if using OpenAI embeddings)
+  - Requires API key
+
+### Optional Dependencies
+
+- `requests` — For Ollama HTTP client (auto-installed with chromadb)
+- `transformers` — For HuggingFace embeddings
+
+### Install All
+
+```bash
+pip install chromadb pypdf pyyaml sentence-transformers requests
+```
 
 ## License
 
@@ -347,7 +719,37 @@ MIT License
 
 ## Next Steps
 
-1. Read **OPTIMIZATION_GUIDE.md** for comprehensive details
-2. Run `test_performance.py` to see benchmarks
-3. Try `streaming_example.py` for practical examples
-4. Use in your RAG pipeline with confidence!
+### Quick Start Path
+
+1. **Setup**: Install requirements and Ollama
+   ```bash
+   pip install -r requirements.txt
+   ollama serve  # In separate terminal
+   ```
+
+2. **Add Documents**: Place PDF/TXT/MD files in `./data`
+
+3. **Build KB**:
+   ```bash
+   python main.py build --kb-name ragtest_kb --data-dir ./data
+   ```
+
+4. **Query**:
+   ```bash
+   python main.py query "Your question here" --use-llm
+   ```
+
+### Deeper Dives
+
+1. **Performance Tuning** → Read **OPTIMIZATION_GUIDE.md**
+2. **Benchmarking** → Run `test_performance.py` and `test_memory_usage.py`
+3. **Examples** → Review `streaming_example.py` and usage patterns
+4. **Production** → Configure embeddings, vector DB, LLM for your use case
+
+### Integration Ideas
+
+- **Chatbot**: Use QueryEngine for context retrieval
+- **Search**: Build search UI with ranked results
+- **Analysis**: Extract insights from retrieved chunks
+- **Augmentation**: Feed results to external LLMs (GPT-4, Claude, etc)
+- **Monitoring**: Track query performance and result quality
