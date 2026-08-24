@@ -9,7 +9,11 @@ Usage:
 
 import argparse
 import sys
+import chromadb
 from src.knowledge_base.builder import KnowledgeBaseBuilder
+from src.retrieval import QueryEngine
+from src.embeddings.factory import EmbeddingsFactory
+from src.llm import OllamaClient
 
 
 def build_kb(args):
@@ -58,10 +62,60 @@ def build_kb(args):
 
 
 def query_kb(args):
-    """Query the knowledge base (Phase 2 - not yet implemented)."""
+    """Query the knowledge base."""
     print("\n📚 Query Knowledge Base\n")
-    print("⏳ Query Engine (Phase 2) - Coming soon!\n")
-    return 1
+    print(f"🔍 Query: {args.query}\n")
+
+    try:
+        # Initialize embeddings (same model used during KB building)
+        config = {
+            "provider": "ollama",
+            "model": args.embedding_model,
+            "base_url": "http://localhost:11434"
+        }
+        embeddings = EmbeddingsFactory.create_from_config(config)
+
+        # Connect to Chroma collection
+        client = chromadb.PersistentClient(path=args.db_path)
+        collection = client.get_collection(name=args.kb_name)
+
+        # Initialize QueryEngine
+        query_engine = QueryEngine(
+            chroma_collection=collection,
+            embeddings=embeddings,
+            top_k=args.top_k,
+            min_score=args.min_score
+        )
+
+        # Run query
+        response = query_engine.query(args.query)
+
+        # Display results
+        query_engine.print_results(response)
+
+        # Generate LLM answer if requested
+        if args.use_llm:
+            print("🤖 Generating answer with LLM...\n")
+            try:
+                llm = OllamaClient(model=args.llm_model)
+                context = query_engine.get_context(args.query, top_k=args.top_k)
+                answer = llm.generate_answer(args.query, context, temperature=args.temperature)
+                print(f"Answer:\n{answer}\n")
+            except ConnectionError as e:
+                print(f"❌ LLM Error: {e}")
+                print(f"Make sure Ollama is running: ollama serve\n")
+                return 1
+            except Exception as e:
+                print(f"❌ Error generating answer: {e}\n")
+                return 1
+
+        return 0
+
+    except Exception as e:
+        print(f"❌ Error querying knowledge base: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 def main():
@@ -137,10 +191,37 @@ Examples:
         help="Path to Chroma database (default: ./chroma_db)"
     )
     query_parser.add_argument(
+        "--embedding-model",
+        default="nomic-embed-text:latest",
+        help="Embedding model (default: nomic-embed-text:latest)"
+    )
+    query_parser.add_argument(
         "--top-k",
         type=int,
         default=5,
         help="Number of results to return (default: 5)"
+    )
+    query_parser.add_argument(
+        "--min-score",
+        type=float,
+        default=0.3,
+        help="Minimum similarity score (default: 0.3)"
+    )
+    query_parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Generate answer using LLM"
+    )
+    query_parser.add_argument(
+        "--llm-model",
+        default="llama2",
+        help="LLM model to use (default: llama2)"
+    )
+    query_parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="LLM temperature for answer generation (default: 0.7)"
     )
     query_parser.set_defaults(func=query_kb)
 
