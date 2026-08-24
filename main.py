@@ -67,6 +67,42 @@ def build_kb(args):
         return 1
 
 
+def analyze_kb(args):
+    """Analyze chunks in knowledge base."""
+    print("\n📊 Analyzing Knowledge Base Chunks\n")
+
+    try:
+        # Load configuration
+        config_loader = get_config_loader()
+        kb_config = config_loader.get_kb_config()
+
+        # Override with CLI arguments if provided
+        kb_name = args.kb_name if args.kb_name != "ragtest_kb" else kb_config["name"]
+        db_path = args.db_path if args.db_path != "./chroma_db" else kb_config["db_path"]
+
+        # Create builder instance (for analysis)
+        builder = KnowledgeBaseBuilder(
+            kb_name=kb_name,
+            db_path=db_path,
+            chunk_size=kb_config["chunk_size"],
+            embeddings_config=config_loader.get_embeddings_config(),
+        )
+
+        # Run analysis
+        analysis = builder.analyze_chunks()
+
+        if analysis and analysis.get("has_mismatch"):
+            print("💡 TIP: Use 'python main.py build' to rebuild with optimized settings")
+
+        return 0
+
+    except Exception as e:
+        print(f"❌ Error analyzing knowledge base: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
 def query_kb(args):
     """Query the knowledge base."""
     print("\n📚 Query Knowledge Base\n")
@@ -194,6 +230,20 @@ Examples:
         help="Path to Chroma database (default: ./chroma_db)"
     )
     build_parser.set_defaults(func=build_kb)
+
+    # Analyze command
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze chunk sizes in knowledge base")
+    analyze_parser.add_argument(
+        "--kb-name",
+        default="ragtest_kb",
+        help="Name of the knowledge base (default: ragtest_kb)"
+    )
+    analyze_parser.add_argument(
+        "--db-path",
+        default="./chroma_db",
+        help="Path to Chroma database (default: ./chroma_db)"
+    )
+    analyze_parser.set_defaults(func=analyze_kb)
 
     # Query command
     query_parser = subparsers.add_parser("query", help="Query the knowledge base")

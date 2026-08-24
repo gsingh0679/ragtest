@@ -19,6 +19,7 @@ from src.embeddings.factory import EmbeddingsFactory
 from src.models import Document, Chunk
 from src.config import get_config_loader
 from src.chroma_utils import init_chroma_collection, verify_embedding_consistency
+from src.chunk_analyzer import ChunkAnalyzer
 
 
 class KnowledgeBaseBuilder:
@@ -194,6 +195,42 @@ class KnowledgeBaseBuilder:
         print()
 
         return stats
+
+    def analyze_chunks(self) -> Dict[str, Any]:
+        """
+        Analyze chunks in the knowledge base for size mismatches.
+
+        Returns:
+            Analysis report with statistics
+        """
+        # Retrieve all chunks from collection
+        all_items = self.collection.get()
+
+        if not all_items or not all_items.get("ids"):
+            print("No chunks in collection to analyze")
+            return {}
+
+        # Reconstruct chunk objects for analysis
+        chunks = []
+        for chunk_id, content, metadata in zip(
+            all_items["ids"],
+            all_items["documents"],
+            all_items["metadatas"]
+        ):
+            chunk = Chunk(
+                content=content,
+                chunk_id=chunk_id,
+                source_document=metadata.get("source", "unknown"),
+                chunk_index=metadata.get("chunk_index", 0),
+                start_char=metadata.get("start_char", 0),
+                end_char=metadata.get("end_char", 0),
+                token_count=metadata.get("token_count", 0),
+            )
+            chunks.append(chunk)
+
+        # Run analysis
+        ChunkAnalyzer.print_analysis(chunks, self.chunk_size)
+        return ChunkAnalyzer.analyze_chunks(chunks, self.chunk_size)
 
     def _add_document(self, doc: Document, progress_callback=None) -> Dict[str, int]:
         """

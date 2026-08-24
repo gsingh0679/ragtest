@@ -17,9 +17,17 @@ class TextChunker:
         Initialize chunker with parameters.
 
         Args:
-            chunk_size: Target characters per chunk (not strict, respects sentence boundaries)
+            chunk_size: Target characters per chunk (soft limit, see break_on_sentences)
+                When break_on_sentences=True: chunks may be smaller to respect sentence boundaries
+                When break_on_sentences=False: chunks will be closer to this size
             overlap: Characters to overlap between chunks
-            break_on_sentences: Try to break at sentence ends instead of mid-sentence
+            break_on_sentences: Quality vs Size trade-off
+                True (default): Prioritize semantic coherence - break at sentence ends
+                              (chunks ~70% of chunk_size due to early sentence breaks)
+                False: Prioritize size consistency - break at hard char limit
+
+        IMPORTANT: Actual chunk size depends on sentence lengths in your text.
+        Use ChunkAnalyzer.print_analysis() after building to verify actual vs configured sizes.
         """
         self.chunk_size = chunk_size
         self.overlap = overlap
