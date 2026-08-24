@@ -12,10 +12,10 @@ from datetime import datetime
 
 import chromadb
 
-from src.document_loader import DocumentLoader
-from src.text_chunker import TextChunker
-from src.embeddings_base import EmbeddingsBase
-from src.embeddings_factory import EmbeddingsFactory
+from src.core.document_loader import DocumentLoader
+from src.core.text_chunker import TextChunker
+from src.embeddings.base import EmbeddingsBase
+from src.embeddings.factory import EmbeddingsFactory
 from src.models import Document, Chunk
 
 

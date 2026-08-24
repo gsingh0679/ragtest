@@ -8,8 +8,8 @@ from typing import Dict, Any, Optional
 import yaml
 import json
 
-from src.embeddings_base import EmbeddingsBase
-from src.embeddings import OllamaEmbeddings, HuggingFaceEmbeddings, OpenAIEmbeddings
+from src.embeddings.base import EmbeddingsBase
+from src.embeddings.implementations import OllamaEmbeddings, HuggingFaceEmbeddings, OpenAIEmbeddings
 
 
 class EmbeddingsFactory:

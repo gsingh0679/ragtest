@@ -10,7 +10,7 @@ Supports:
 import requests
 from typing import List, Optional
 
-from src.embeddings_base import EmbeddingsBase
+from src.embeddings.base import EmbeddingsBase
 
 
 class OllamaEmbeddings(EmbeddingsBase):

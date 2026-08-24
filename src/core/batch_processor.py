@@ -6,8 +6,8 @@ without accumulating all chunks in memory.
 """
 
 from pathlib import Path
-from src.document_loader import DocumentLoader
-from src.text_chunker import TextChunker
+from src.core.document_loader import DocumentLoader
+from src.core.text_chunker import TextChunker
 from src.models import Chunk
 from typing import Callable, Iterator
 
