@@ -264,6 +264,20 @@ class KnowledgeBaseBuilder:
 
         print(f"  ✓ Generated {len(embeddings)} embeddings")
 
+        # Validate embeddings were generated
+        if not embeddings or len(embeddings) != len(chunks_list):
+            raise RuntimeError(
+                f"Embedding generation failed: expected {len(chunks_list)} embeddings, got {len(embeddings) if embeddings else 0}"
+            )
+
+        # Validate embedding dimensions
+        embedding_dim = len(embeddings[0]) if embeddings[0] else 0
+        expected_dim = self.embeddings.get_embedding_dimension()
+        if embedding_dim != expected_dim:
+            raise RuntimeError(
+                f"Embedding dimension mismatch: got {embedding_dim}D, expected {expected_dim}D"
+            )
+
         # Prepare data for Chroma
         ids = [chunk.chunk_id for chunk in chunks_list]
         documents = [chunk.content for chunk in chunks_list]
@@ -278,13 +292,20 @@ class KnowledgeBaseBuilder:
             for chunk in chunks_list
         ]
 
-        # Add to Chroma collection
-        self.collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=documents,
-            metadatas=metadatas
-        )
+        # Add to Chroma collection with validation
+        try:
+            self.collection.add(
+                ids=ids,
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to add embeddings to Chroma collection: {e}\n"
+                f"This may indicate a dimension mismatch or corrupted collection.\n"
+                f"Try: rm -rf {self.db_path} && python main.py build"
+            )
 
         print(f"  ✓ Stored in Chroma database\n")
 
