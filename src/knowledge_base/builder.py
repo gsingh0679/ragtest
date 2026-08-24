@@ -18,7 +18,7 @@ from src.embeddings.base import EmbeddingsBase
 from src.embeddings.factory import EmbeddingsFactory
 from src.models import Document, Chunk
 from src.config import get_config_loader
-from src.chroma_utils import init_chroma_collection, verify_embedding_consistency
+from src.chroma_utils import init_chroma_collection
 from src.chunk_analyzer import ChunkAnalyzer
 
 
@@ -151,14 +151,8 @@ class KnowledgeBaseBuilder:
         if not dir_path.is_dir():
             raise ValueError(f"Directory not found: {dir_path}")
 
-        # Verify embedding consistency
-        print("🔍 Verifying embedding consistency...")
-        try:
-            verify_embedding_consistency(self.collection, self.embeddings)
-            print("✓ Embedding consistency verified\n")
-        except ValueError as e:
-            print(f"❌ {e}\n")
-            raise
+        # Note: Embedding consistency is now handled by ChromaDB's embedding function
+        # No manual verification needed
 
         stats = {
             "documents_loaded": 0,
@@ -259,25 +253,6 @@ class KnowledgeBaseBuilder:
         # Extract chunk contents for embedding
         chunk_texts = [chunk.content for chunk in chunks_list]
 
-        # Generate embeddings
-        embeddings = self.embeddings.embed_texts(chunk_texts)
-
-        print(f"  ✓ Generated {len(embeddings)} embeddings")
-
-        # Validate embeddings were generated
-        if not embeddings or len(embeddings) != len(chunks_list):
-            raise RuntimeError(
-                f"Embedding generation failed: expected {len(chunks_list)} embeddings, got {len(embeddings) if embeddings else 0}"
-            )
-
-        # Validate embedding dimensions
-        embedding_dim = len(embeddings[0]) if embeddings[0] else 0
-        expected_dim = self.embeddings.get_embedding_dimension()
-        if embedding_dim != expected_dim:
-            raise RuntimeError(
-                f"Embedding dimension mismatch: got {embedding_dim}D, expected {expected_dim}D"
-            )
-
         # Prepare data for Chroma
         ids = [chunk.chunk_id for chunk in chunks_list]
         documents = [chunk.content for chunk in chunks_list]
@@ -292,24 +267,24 @@ class KnowledgeBaseBuilder:
             for chunk in chunks_list
         ]
 
-        # Add to Chroma collection with validation
+        # Add to Chroma collection
+        # ChromaDB's embedding function will handle embedding generation
         try:
             self.collection.add(
                 ids=ids,
-                embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas
             )
+            print(f"  ✓ Stored {len(ids)} documents with embeddings in Chroma")
         except Exception as e:
             raise RuntimeError(
-                f"Failed to add embeddings to Chroma collection: {e}\n"
-                f"This may indicate a dimension mismatch or corrupted collection.\n"
+                f"Failed to add documents to Chroma collection: {e}\n"
                 f"Try: rm -rf {self.db_path} && python main.py build"
             )
 
         print(f"  ✓ Stored in Chroma database\n")
 
-        return {"chunks": len(chunks_list), "embeddings": len(embeddings)}
+        return {"chunks": len(chunks_list), "embeddings": len(chunks_list)}
 
     def add_document(self, file_path: str) -> Dict[str, int]:
         """

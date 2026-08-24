@@ -5,7 +5,53 @@ Prevents dimension mismatch issues by ensuring consistent embedding models.
 """
 
 import chromadb
+import numpy as np
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from src.embeddings.base import EmbeddingsBase
+
+
+class OllamaEmbeddingFunction(EmbeddingFunction):
+    """ChromaDB embedding function wrapper for Ollama embeddings."""
+
+    def __init__(self, embeddings_model: EmbeddingsBase):
+        """
+        Initialize embedding function.
+
+        Args:
+            embeddings_model: EmbeddingsBase instance to use
+        """
+        self.embeddings = embeddings_model
+
+    def __call__(self, input: Documents) -> Embeddings:
+        """
+        Generate embeddings for documents.
+
+        Args:
+            input: List of documents to embed
+
+        Returns:
+            List of numpy arrays (required by ChromaDB Embeddings type)
+        """
+        # Handle both single strings and lists
+        if isinstance(input, str):
+            embedding = self.embeddings.embed_text(input)
+            # Convert to numpy array (required by ChromaDB)
+            if isinstance(embedding, np.ndarray):
+                return [embedding]
+            else:
+                return [np.array(embedding, dtype=np.float32)]
+
+        # For lists, use batch embedding
+        embeddings = self.embeddings.embed_texts(input)
+
+        # Convert all to numpy arrays
+        result = []
+        for emb in embeddings:
+            if isinstance(emb, np.ndarray):
+                result.append(emb.astype(np.float32))
+            else:
+                result.append(np.array(emb, dtype=np.float32))
+        return result
 
 
 def init_chroma_collection(
@@ -22,15 +68,20 @@ def init_chroma_collection(
         embeddings_model: Embeddings model to use
 
     Returns:
-        Chroma collection instance
+        Chroma collection instance and client
     """
     # Create persistent client
     client = chromadb.PersistentClient(path=db_path)
 
-    # Get or create collection
+    # Create embedding function wrapper
+    embedding_function = OllamaEmbeddingFunction(embeddings_model)
+
+    # Get or create collection with embedding function
+    # This tells ChromaDB to use our embeddings function
     collection = client.get_or_create_collection(
         name=collection_name,
-        metadata={"hnsw:space": "cosine"}
+        metadata={"hnsw:space": "cosine"},
+        embedding_function=embedding_function
     )
 
     return collection, client
