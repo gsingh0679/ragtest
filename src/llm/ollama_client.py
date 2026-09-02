@@ -1,7 +1,7 @@
 """Ollama LLM client for answer generation."""
 
 import requests
-from typing import Optional
+from typing import Optional, List
 
 
 class OllamaClient:
@@ -18,6 +18,52 @@ class OllamaClient:
         self.model = model
         self.base_url = base_url
         self.generate_url = f"{base_url}/api/generate"
+        self.list_url = f"{base_url}/api/tags"
+
+        # Verify model is available
+        self._verify_model()
+
+    def _verify_model(self):
+        """Check if the specified model is available in Ollama."""
+        try:
+            response = requests.get(self.list_url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            available_models = [m["name"].split(":")[0] for m in data.get("models", [])]
+
+            model_base = self.model.split(":")[0]
+            if not available_models:
+                raise ValueError(
+                    f"❌ No models found in Ollama. "
+                    f"Pull a model first: ollama pull mistral"
+                )
+
+            if model_base not in available_models:
+                models_list = ", ".join(available_models)
+                raise ValueError(
+                    f"❌ Model '{self.model}' not found in Ollama.\n"
+                    f"Available models: {models_list}\n"
+                    f"Pull a model: ollama pull mistral"
+                )
+        except requests.ConnectionError:
+            raise ConnectionError(
+                f"❌ Could not connect to Ollama at {self.base_url}. "
+                f"Make sure it's running: ollama serve"
+            )
+        except Exception as e:
+            if "Model" in str(e):
+                raise
+            raise ConnectionError(f"Error checking Ollama models: {e}")
+
+    def get_available_models(self) -> List[str]:
+        """Get list of available models from Ollama."""
+        try:
+            response = requests.get(self.list_url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return [m["name"].split(":")[0] for m in data.get("models", [])]
+        except Exception as e:
+            raise Exception(f"Error fetching models: {e}")
 
     def generate(
         self,

@@ -14,30 +14,43 @@ A production-ready Retrieval-Augmented Generation (RAG) system with memory-effic
 
 ## Quick Start
 
-### 1. Build Knowledge Base
+### Setup (First Time Only)
 
 ```bash
-# Build KB from documents in ./data directory
-python main.py build --kb-name ragtest_kb --data-dir ./data
+# 1. Start Ollama in another terminal
+ollama serve
 
-# Custom settings
-python main.py build --chunk-size 1000 --overlap 200 --model nomic-embed-text:latest
+# 2. Verify Ollama setup
+python test_ollama.py
+
+# 3. Build knowledge base from documents
+python main.py build --kb-name ragtest_kb --data-dir ./data
 ```
 
-### 2. Query Knowledge Base
+### 3 Ways to Query
+
+#### Option A: Web UI (Recommended for Interactive Use)
 
 ```bash
-# Simple retrieval (semantic search only)
+streamlit run assistant.py
+# Opens browser at http://localhost:8501
+# Features: Chat interface, real-time results, configurable settings
+```
+
+#### Option B: CLI (Quick One-Off Queries)
+
+```bash
+# Simple retrieval
 python main.py query "What are the key features?"
 
-# Retrieve top results
-python main.py query "What are the key features?" --top-k 10
+# With LLM answer
+python main.py query "What are the key features?" --use-llm
 
-# With LLM answer generation
-python main.py query "What are the key features?" --use-llm --llm-model llama2
+# Custom settings
+python main.py query "What is RAG?" --top-k 10 --min-score 0.5 --use-llm
 ```
 
-### Python API
+#### Option C: Python API (Programmatic Access)
 
 ```python
 from src.knowledge_base.builder import KnowledgeBaseBuilder
@@ -134,10 +147,16 @@ ragtest/
 │
 ├── data/                      # Sample documents
 ├── chroma_db/                 # Vector database (created after build)
+│
 ├── config.yaml                # Configuration file
 ├── main.py                    # CLI entry point
+├── assistant.py               # Streamlit web UI (interactive chat)
+├── rag_test_suite.py          # End-to-end RAG pipeline tests
+├── test_ollama.py             # Ollama setup verification
+│
 ├── streaming_example.py       # Usage examples
 ├── OPTIMIZATION_GUIDE.md      # Complete optimization guide
+├── SETUP_GUIDE.md             # Setup and troubleshooting guide
 └── README.md                  # This file
 ```
 
@@ -669,14 +688,23 @@ A: Reduce `top_k`, use higher `min_score`, or pre-filter by source.
 **Q: What if my Ollama model is on a different machine?**
 A: Set `base_url` in config to the remote address: `http://192.168.1.100:11434`
 
+## Interface Comparison
+
+| Feature | Web UI | CLI | Python API |
+|---------|--------|-----|-----------|
+| **Interface** | Streamlit browser | Terminal | Code |
+| **Learning Curve** | Easiest | Medium | Hardest |
+| **Real-time Chat** | ✅ Yes | ❌ No | ✅ Yes |
+| **Configuration** | GUI Sidebar | CLI flags | Programmatic |
+| **Best For** | Exploration, demos | Automation, scripts | Integration, custom logic |
+| **Launch** | `streamlit run assistant.py` | `python main.py` | `import src.*` |
+
 ## Documentation
 
-For detailed information, see **OPTIMIZATION_GUIDE.md**:
-- Best practices and patterns
-- Configuration tuning
-- Troubleshooting guide
-- Performance analysis
-- Complete API reference
+For detailed information:
+- **SETUP_GUIDE.md** — Installation, model setup, troubleshooting
+- **OPTIMIZATION_GUIDE.md** — Best practices, configuration tuning, performance
+- **Code examples** — `streaming_example.py`, `rag_test_suite.py`
 
 ## Requirements
 
@@ -717,39 +745,55 @@ pip install chromadb pypdf pyyaml sentence-transformers requests
 
 MIT License
 
-## Next Steps
+## Getting Started
 
-### Quick Start Path
+### 1. Initial Setup (One Time)
 
-1. **Setup**: Install requirements and Ollama
-   ```bash
-   pip install -r requirements.txt
-   ollama serve  # In separate terminal
-   ```
+```bash
+# Install Python dependencies
+pip install chromadb pypdf pyyaml sentence-transformers requests streamlit
 
-2. **Add Documents**: Place PDF/TXT/MD files in `./data`
+# Start Ollama in another terminal
+ollama serve
 
-3. **Build KB**:
-   ```bash
-   python main.py build --kb-name ragtest_kb --data-dir ./data
-   ```
+# Verify setup
+python test_ollama.py
+```
 
-4. **Query**:
-   ```bash
-   python main.py query "Your question here" --use-llm
-   ```
+### 2. Build Knowledge Base
 
-### Deeper Dives
+```bash
+# Place your documents in ./data (PDF, TXT, or Markdown)
+python main.py build --kb-name ragtest_kb --data-dir ./data
+```
 
-1. **Performance Tuning** → Read **OPTIMIZATION_GUIDE.md**
-2. **Benchmarking** → Run `test_performance.py` and `test_memory_usage.py`
-3. **Examples** → Review `streaming_example.py` and usage patterns
-4. **Production** → Configure embeddings, vector DB, LLM for your use case
+### 3. Query Your Knowledge Base
 
-### Integration Ideas
+**Choose your interface:**
 
-- **Chatbot**: Use QueryEngine for context retrieval
-- **Search**: Build search UI with ranked results
-- **Analysis**: Extract insights from retrieved chunks
-- **Augmentation**: Feed results to external LLMs (GPT-4, Claude, etc)
-- **Monitoring**: Track query performance and result quality
+```bash
+# Option A: Interactive Web UI (Recommended)
+streamlit run assistant.py
+
+# Option B: CLI (One-off queries)
+python main.py query "Your question" --use-llm
+
+# Option C: Python Code (Custom logic)
+# See "Python API" section above
+```
+
+### Learn More
+
+- **Setup Help** → See `SETUP_GUIDE.md` for installation and troubleshooting
+- **Performance Tips** → Read `OPTIMIZATION_GUIDE.md` for best practices
+- **Test Your Setup** → Run `test_ollama.py` to verify Ollama is ready
+- **See Examples** → Check `streaming_example.py` and `rag_test_suite.py`
+
+### Production Deployment
+
+For production use:
+1. Configure `config.yaml` for your environment
+2. Use appropriate embedding model (Ollama, HuggingFace, or OpenAI)
+3. Set up persistent Chroma database
+4. Monitor performance with built-in analytics
+5. Consider deploying Web UI with Streamlit Cloud or Docker
