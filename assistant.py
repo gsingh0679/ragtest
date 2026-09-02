@@ -47,7 +47,7 @@ def load_knowledge_base(kb_name: str, db_path: str, embedding_model: str):
         return None, None
 
 
-def initialize_llm(llm_model: str, base_url: str = "http://localhost:11434"):
+def initialize_llm(llm_model: str, base_url: str):
     """Initialize LLM client (no caching - need fresh instance each time)"""
     try:
         return OllamaClient(model=llm_model, base_url=base_url)
@@ -62,7 +62,7 @@ def initialize_llm(llm_model: str, base_url: str = "http://localhost:11434"):
         return None
 
 
-def get_available_models(base_url: str = "http://localhost:11434"):
+def get_available_models(base_url: str):
     """Get available models from Ollama (returns full names like 'neural-chat:latest')"""
     try:
         import requests
@@ -109,10 +109,19 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
 
+        # Load config first (before using it)
+        config_loader = load_config()
+        kb_config = config_loader.get_kb_config()
+        retrieval_config = config_loader.get_retrieval_config()
+        llm_config = config_loader.get_llm_config()
+
+        # Get Ollama base URL from config
+        ollama_base_url = llm_config.get("base_url", "http://localhost:11434")
+
         # Check Ollama connectivity
         try:
             import requests
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
+            response = requests.get(f"{ollama_base_url}/api/tags", timeout=2)
             if response.status_code == 200:
                 data = response.json()
                 models = [m["name"].split(":")[0] for m in data.get("models", [])]
@@ -120,17 +129,13 @@ def main():
             else:
                 st.warning("⚠️ Ollama not responding properly")
         except requests.ConnectionError:
-            st.error("❌ Cannot connect to Ollama at http://localhost:11434")
+            st.error(f"❌ Cannot connect to Ollama at {ollama_base_url}")
             st.info("Run in another terminal: `ollama serve`")
         except Exception as e:
             st.warning(f"⚠️ Error checking Ollama: {e}")
 
         # Knowledge Base Settings
         st.subheader("Knowledge Base")
-        config_loader = load_config()
-        kb_config = config_loader.get_kb_config()
-        retrieval_config = config_loader.get_retrieval_config()
-        llm_config = config_loader.get_llm_config()
 
         kb_name = st.text_input(
             "KB Name",
@@ -180,11 +185,14 @@ def main():
             help="Generate natural language answers using LLM"
         )
 
+        # Get default from config (already loaded above)
+        default_llm_base_url = llm_config.get("base_url", "http://localhost:11434")
+
         # Define variables outside conditional so they're always available
         llm_base_url = st.text_input(
             "LLM Base URL",
-            value=llm_config.get("base_url", "http://localhost:11434"),
-            help="Ollama server address"
+            value=default_llm_base_url,
+            help="Ollama server address (from env/config)"
         )
 
         available_models = get_available_models(llm_base_url)

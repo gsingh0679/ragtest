@@ -2,19 +2,35 @@
 
 import requests
 from typing import Optional, List
+from src.config import get_config_loader
 
 
 class OllamaClient:
-    """Client for Ollama LLM."""
+    """Client for Ollama LLM (uses config defaults if not specified)."""
 
-    def __init__(self, model: str = "llama2", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: Optional[str] = None, base_url: Optional[str] = None):
         """
         Initialize Ollama client.
 
         Args:
-            model: Model name (e.g., "llama2", "mistral", "neural-chat")
-            base_url: Base URL for Ollama server
+            model: Model name (uses config default if not provided)
+            base_url: Base URL for Ollama server (uses config default if not provided)
         """
+        # Load from config/env if not provided
+        if model is None or base_url is None:
+            try:
+                import os
+                # Try config first
+                config_loader = get_config_loader()
+                llm_config = config_loader.get_llm_config()
+                model = model or llm_config.get("model")
+                base_url = base_url or llm_config.get("base_url")
+            except Exception:
+                # Fallback to env defaults
+                import os
+                model = model or os.getenv("DEFAULT_OLLAMA_LLM_MODEL", "llama2")
+                base_url = base_url or os.getenv("DEFAULT_OLLAMA_BASE_URL", "http://localhost:11434")
+
         self.model = model
         self.base_url = base_url
         self.generate_url = f"{base_url}/api/generate"
@@ -26,7 +42,9 @@ class OllamaClient:
     def _verify_model(self):
         """Check if the specified model is available in Ollama."""
         try:
-            response = requests.get(self.list_url, timeout=5)
+            import os
+            timeout = int(os.getenv("OLLAMA_TIMEOUT", os.getenv("DEFAULT_OLLAMA_TIMEOUT", "5")))
+            response = requests.get(self.list_url, timeout=timeout)
             response.raise_for_status()
             data = response.json()
             available_models = [m["name"].split(":")[0] for m in data.get("models", [])]
@@ -58,7 +76,9 @@ class OllamaClient:
     def get_available_models(self) -> List[str]:
         """Get list of available models from Ollama."""
         try:
-            response = requests.get(self.list_url, timeout=5)
+            import os
+            timeout = int(os.getenv("OLLAMA_TIMEOUT", os.getenv("DEFAULT_OLLAMA_TIMEOUT", "5")))
+            response = requests.get(self.list_url, timeout=timeout)
             response.raise_for_status()
             data = response.json()
             return [m["name"].split(":")[0] for m in data.get("models", [])]

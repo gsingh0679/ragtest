@@ -10,6 +10,7 @@ import json
 
 from src.embeddings.base import EmbeddingsBase
 from src.embeddings.implementations import OllamaEmbeddings, HuggingFaceEmbeddings, OpenAIEmbeddings
+from src.config import get_config_loader
 
 
 class EmbeddingsFactory:
@@ -95,24 +96,53 @@ class EmbeddingsFactory:
     @classmethod
     def create_ollama(
         cls,
-        model: str = "nomic-embed-text:latest",
-        base_url: str = "http://localhost:11434"
+        model: Optional[str] = None,
+        base_url: Optional[str] = None
     ) -> OllamaEmbeddings:
-        """Create Ollama embeddings quickly."""
+        """
+        Create Ollama embeddings with config defaults.
+
+        Args:
+            model: Model name (uses config default if not provided)
+            base_url: Ollama server URL (uses config default if not provided)
+        """
+        if model is None or base_url is None:
+            config_loader = get_config_loader()
+            embeddings_config = config_loader.get_embeddings_config()
+            model = model or embeddings_config.get("model", "nomic-embed-text:latest")
+            base_url = base_url or embeddings_config.get("base_url", "http://localhost:11434")
+
         return OllamaEmbeddings(model=model, base_url=base_url)
 
     @classmethod
-    def create_huggingface(cls, model: str = "all-MiniLM-L6-v2") -> HuggingFaceEmbeddings:
-        """Create HuggingFace embeddings quickly."""
+    def create_huggingface(cls, model: Optional[str] = None) -> HuggingFaceEmbeddings:
+        """
+        Create HuggingFace embeddings with config defaults.
+
+        Args:
+            model: Model name (uses config default if not provided)
+        """
+        if model is None:
+            import os
+            model = os.getenv("HUGGINGFACE_MODEL") or os.getenv("DEFAULT_HUGGINGFACE_MODEL", "all-MiniLM-L6-v2")
         return HuggingFaceEmbeddings(model=model)
 
     @classmethod
     def create_openai(
         cls,
-        model: str = "text-embedding-3-small",
+        model: Optional[str] = None,
         api_key: Optional[str] = None
     ) -> OpenAIEmbeddings:
-        """Create OpenAI embeddings quickly."""
+        """
+        Create OpenAI embeddings with config defaults.
+
+        Args:
+            model: Model name (uses config default if not provided)
+            api_key: OpenAI API key (uses env var if not provided)
+        """
+        if model is None:
+            import os
+            model = os.getenv("OPENAI_MODEL") or os.getenv("DEFAULT_OPENAI_MODEL", "text-embedding-3-small")
         return OpenAIEmbeddings(model=model, api_key=api_key)
 
     @classmethod

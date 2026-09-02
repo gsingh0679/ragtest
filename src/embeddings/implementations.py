@@ -11,19 +11,35 @@ import requests
 from typing import List, Optional
 
 from src.embeddings.base import EmbeddingsBase
+from src.config import get_config_loader
 
 
 class OllamaEmbeddings(EmbeddingsBase):
     """Generate embeddings using Ollama."""
 
-    def __init__(self, model: str = "nomic-embed-text:latest", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: Optional[str] = None, base_url: Optional[str] = None):
         """
         Initialize Ollama embeddings.
 
         Args:
-            model: Model name (default: nomic-embed-text:latest)
-            base_url: Ollama server URL (default: http://localhost:11434)
+            model: Model name (uses config default if not provided)
+            base_url: Ollama server URL (uses config default if not provided)
         """
+        # Load from config/env if not provided
+        if model is None or base_url is None:
+            try:
+                import os
+                # Try config first
+                config_loader = get_config_loader()
+                embeddings_config = config_loader.get_embeddings_config()
+                model = model or embeddings_config.get("model")
+                base_url = base_url or embeddings_config.get("base_url")
+            except Exception:
+                # Fallback to env defaults
+                import os
+                model = model or os.getenv("DEFAULT_OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest")
+                base_url = base_url or os.getenv("DEFAULT_OLLAMA_BASE_URL", "http://localhost:11434")
+
         self.model = model
         self.base_url = base_url
         self.endpoint = f"{base_url}/api/embeddings"
@@ -33,7 +49,9 @@ class OllamaEmbeddings(EmbeddingsBase):
     def verify_connection(self) -> bool:
         """Verify Ollama is running and model is available."""
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            import os
+            timeout = int(os.getenv("OLLAMA_TIMEOUT", os.getenv("DEFAULT_OLLAMA_TIMEOUT", "5")))
+            response = requests.get(f"{self.base_url}/api/tags", timeout=timeout)
             if response.status_code != 200:
                 raise ConnectionError(f"Ollama returned status {response.status_code}")
 
@@ -63,10 +81,12 @@ class OllamaEmbeddings(EmbeddingsBase):
             raise ValueError("Text cannot be empty")
 
         try:
+            import os
+            timeout = int(os.getenv("EMBEDDINGS_TIMEOUT", os.getenv("DEFAULT_EMBEDDINGS_TIMEOUT", "30")))
             response = requests.post(
                 self.endpoint,
                 json={"model": self.model, "prompt": text},
-                timeout=30
+                timeout=timeout
             )
             response.raise_for_status()
             result = response.json()
@@ -104,13 +124,16 @@ class OllamaEmbeddings(EmbeddingsBase):
 class HuggingFaceEmbeddings(EmbeddingsBase):
     """Generate embeddings using HuggingFace sentence-transformers (local)."""
 
-    def __init__(self, model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model: Optional[str] = None):
         """
         Initialize HuggingFace embeddings.
 
         Args:
-            model: Model name from sentence-transformers
+            model: Model name from sentence-transformers (uses config default if not provided)
         """
+        if model is None:
+            import os
+            model = os.getenv("HUGGINGFACE_MODEL") or os.getenv("DEFAULT_HUGGINGFACE_MODEL", "all-MiniLM-L6-v2")
         self.model = model
         self._model_instance = None
         self._embedding_dim = None
@@ -168,14 +191,17 @@ class HuggingFaceEmbeddings(EmbeddingsBase):
 class OpenAIEmbeddings(EmbeddingsBase):
     """Generate embeddings using OpenAI API."""
 
-    def __init__(self, model: str = "text-embedding-3-small", api_key: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
         """
         Initialize OpenAI embeddings.
 
         Args:
-            model: OpenAI model name
+            model: OpenAI model name (uses config default if not provided)
             api_key: OpenAI API key (if None, uses OPENAI_API_KEY env var)
         """
+        if model is None:
+            import os
+            model = os.getenv("OPENAI_MODEL") or os.getenv("DEFAULT_OPENAI_MODEL", "text-embedding-3-small")
         self.model = model
         self.api_key = api_key
         self._embedding_dim = None
